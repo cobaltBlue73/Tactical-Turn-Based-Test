@@ -3,12 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace GridSystem
 {
     [CreateAssetMenu(fileName = nameof(LevelMap),
         menuName = nameof(GridSystem) + "/" + nameof(LevelMap))]
-    public class LevelMap : ScriptableObject, IEnumerable<LevelMapGridCell>
+    public class LevelMap : ScriptableObject, IEnumerable<LevelMapCell>
     {
         #region Events
 
@@ -30,7 +31,7 @@ namespace GridSystem
 
         #region Variables
 
-        private Grid<LevelMapGridCell> levelMapGrid;
+        private Grid<LevelMapCell> levelMapGrid;
         private IGridToWorldPositionConverter gridToWorldConverter;
         private IWorldToGridCoordinatesConverter worldToGridConverter;
 
@@ -41,9 +42,9 @@ namespace GridSystem
         #region Public
 
         public void InitGrid(int width, int length,
-            Func<Grid<LevelMapGridCell>, Vector2Int, LevelMapGridCell> levelMapGridCellFactory)
+            Func<Vector2Int, LevelMapCell> levelMapGridCellFactory)
         {
-            levelMapGrid = new Grid<LevelMapGridCell>(width, length, levelMapGridCellFactory);
+            levelMapGrid = new Grid<LevelMapCell>(width, length, levelMapGridCellFactory);
         }
 
         public void SetGridToWorldPositionConverter(IGridToWorldPositionConverter converter) =>
@@ -61,31 +62,22 @@ namespace GridSystem
         public Vector2Int? GetGridCoordinates(Vector3 worldPosition) =>
             worldToGridConverter?.GetGridCoordinates(worldPosition);
 
-        public bool TryGetGridCell(int x, int y, out LevelMapGridCell gridCell)
-        {
-            gridCell = default;
+        public LevelMapCell GetGridCell(int x, int y) => levelMapGrid.GetGridElement(x, y);
 
-            return levelMapGrid != null &&
-                   levelMapGrid.TryGetGridElement(x, y, out gridCell);
-        }
-
-        public bool TryGetGridCell(Vector2Int coordinates, out LevelMapGridCell gridCell) =>
-            TryGetGridCell(coordinates.x, coordinates.y, out gridCell);
-
-
-        public bool IsValidGridPosition(int x, int y) =>
+        public LevelMapCell GetGridCell(Vector2Int coordinates) => GetGridCell(coordinates.x, coordinates.y);
+        
+        public bool IsValidGridCoordinates(int x, int y) =>
             levelMapGrid != null &&
             levelMapGrid.IsValidGridCoordinates(x, y);
 
-        public bool IsValidGridPosition(Vector2Int coordinates) =>
-            IsValidGridPosition(coordinates.x, coordinates.y);
+        public bool IsValidGridCoordinates(Vector2Int coordinates) =>
+            IsValidGridCoordinates(coordinates.x, coordinates.y);
 
         public void AddGridBodyAtGridCoordinates(int x, int y, GridBody gridBody)
         {
-            if (levelMapGrid == null ||
-                !levelMapGrid.TryGetGridElement(x, y, out var cell)) return;
+            if (!IsValidGridCoordinates(x, y))return;
 
-            cell.AddGridBody(gridBody);
+            GetGridCell(x, y).AddGridBody(gridBody);
         }
 
         public void AddGridBodyAtGridCoordinates(Vector2Int coordinates, GridBody gridBody) =>
@@ -93,10 +85,9 @@ namespace GridSystem
 
         public void RemoveGridBodyAtGridCoordinates(int x, int y, GridBody gridBody)
         {
-            if (levelMapGrid == null ||
-                !levelMapGrid.TryGetGridElement(x, y, out var cell)) return;
+            if (!IsValidGridCoordinates(x, y))return;
 
-            cell.RemoveGridBody(gridBody);
+            GetGridCell(x, y).RemoveGridBody(gridBody);
         }
 
         public void RemoveGridBodyAtGridCoordinates(Vector2Int coordinates, GridBody gridBody) =>
@@ -106,36 +97,31 @@ namespace GridSystem
         public bool AnyGridBodyAtGridCoordinates(int x, int y)
         {
             if (levelMapGrid == null ||
-                !levelMapGrid.TryGetGridElement(x, y, out var cell))
+                !levelMapGrid.IsValidGridCoordinates(x, y))
                 return false;
 
-            return cell.HasAnyGridBody();
+            return levelMapGrid.GetGridElement(x, y).HasAnyGridBody();
         }
 
         public bool AnyGridBodyAtGridCoordinates(Vector2Int coordinates) =>
             AnyGridBodyAtGridCoordinates(coordinates.x, coordinates.y);
 
-        public bool TryGetGridBodyAtGridCoordinates(int x, int y, out GridBody gridBody)
+        public GridBody GetGridBodyAt(int x, int y)
         {
-            gridBody = default;
+            if (levelMapGrid == null || !IsValidGridCoordinates(x, y))
+                return null;
 
-            if (levelMapGrid == null ||
-                !levelMapGrid.TryGetGridElement(x, y, out var cell))
-                return false;
-
-            return cell.TryGetGridBody(out gridBody);
+            return GetGridCell(x, y).GetGridBody();
         }
 
-        public bool TryGetGridBodyAtGridCoordinates(Vector2Int coordinates, out GridBody gridBody) =>
-            TryGetGridBodyAtGridCoordinates(coordinates.x, coordinates.y, out gridBody);
+        public GridBody GetGridBodyAt(Vector2Int coordinates) => GetGridBodyAt(coordinates.x, coordinates.y);
 
         public IEnumerable<GridBody> GetGridBodiesAtGridCoordinates(int x, int y)
         {
-            if (levelMapGrid == null ||
-                !levelMapGrid.TryGetGridElement(x, y, out var cell))
+            if (levelMapGrid == null || !IsValidGridCoordinates(x, y))
                 return null;
 
-            return cell.GridBodies;
+            return GetGridCell(x, y).GridBodies;
         }
 
         public IEnumerable<GridBody> GetGridBodiesAtGridCoordinates(Vector2Int coordinates) =>
@@ -150,27 +136,23 @@ namespace GridSystem
             OnGridBodyChangedCoordinates?.Invoke(gridBody, fromCoordinates, toCoordinates);
         }
 
-        public LevelMap From(int x, int y)
-        {
-            levelMapGrid.From(x, y);
-            return this;
-        }
+        public void ForEach(Action<int, int, LevelMapCell> onElement) => levelMapGrid?.ForEach(onElement);
+        
+        public void ForEach(Vector2Int from, Vector2Int to, Action<int, int, LevelMapCell> onElement) =>
+            levelMapGrid?.ForEach(from.x, from.y, to.x, to.y, onElement);
+        
+        public void ForEach(int fromX, int fromY, int toX, int toY, Action<int, int, LevelMapCell> onElement) =>
+            levelMapGrid?.ForEach(fromX, fromY, toX, toY, onElement);
+        
+        public Span<LevelMapCell> AsSpan(Vector2Int from) => levelMapGrid.AsSpan(from);
 
-        public LevelMap From(Vector2Int coordinates) => From(coordinates.x, coordinates.y);
-
-        public LevelMap To(int x, int y)
-        {
-            levelMapGrid.To(x, y);
-            return this;
-        }
-
-        public IEnumerable<LevelMapGridCell> To(Vector2Int coordinates) => To(coordinates.x, coordinates.y);
-
+        public Span<LevelMapCell> AsSpan(Vector2Int from, Vector2Int to) => levelMapGrid.AsSpan(from, to);
+        
         #endregion
 
         #region Interfaces
 
-        public IEnumerator<LevelMapGridCell> GetEnumerator() => levelMapGrid.GetEnumerator();
+        public IEnumerator<LevelMapCell> GetEnumerator() => levelMapGrid.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 

@@ -7,9 +7,10 @@ namespace GridSystem
     {
         #region Constructor
 
-        public PathNode(Vector2Int gridCoordinates)
+        public PathNode(Vector2Int gridCoordinates, LevelMapCell levelMapCell)
         {
             GridCoordinates = gridCoordinates;
+            LevelMapCell = levelMapCell;
             GCost = HCost = 0;
             PreviousNodeOnPath = null;
         }
@@ -22,7 +23,10 @@ namespace GridSystem
         public int HCost { get; set; }
         public int FCost => HCost + HCost;
         public Vector2Int GridCoordinates { get; }
+        public LevelMapCell LevelMapCell { get; }
         public PathNode PreviousNodeOnPath { get; set; }
+        public int Height => LevelMapCell.Height;
+        public bool IsWalkable => LevelMapCell.IsWalkable;
 
         #endregion
 
@@ -45,7 +49,8 @@ namespace GridSystem
             other is PathNode node && Equals(node);
 
         public bool Equals(PathNode other) =>
-            other != null && GridCoordinates.Equals(other.GridCoordinates);
+             other != null && 
+             GridCoordinates.Equals(other.GridCoordinates);
 
         #endregion
 

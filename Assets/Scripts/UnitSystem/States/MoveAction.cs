@@ -19,9 +19,9 @@ namespace UnitSystem.States
 
         public Vector2Int? DestinationCoordinates { get; set; }
 
-        private Vector3[] movementPath;
-        private Vector2Int[] movementArea;
-        private int curPathIndex;
+        private Vector3[] _movementPath;
+        private Vector2Int[] _movementArea;
+        private int _curPathIndex;
 
         public override bool CanExecute =>
             base.CanExecute && DestinationCoordinates.HasValue;
@@ -35,32 +35,34 @@ namespace UnitSystem.States
         public override void OnEnter()
         {
             base.OnEnter();
+            
+            if(!DestinationCoordinates.HasValue) return;
 
             var result = pathfinder.FindPath(UnitReference.GridBody.GridCoordinates,
                 DestinationCoordinates.Value);
 
             if (!result.HasValue) return;
 
-            movementPath = result.Value.path.Select(coordinates =>
+            _movementPath = result.Value.path.Select(coordinates =>
                 levelMap.GetWorldPosition(coordinates).Value).ToArray();
 
-            curPathIndex = 0;
+            _curPathIndex = 0;
         }
 
         public override void OnExit()
         {
-            movementArea = null;
+            _movementArea = null;
         }
 
         public override void OnUpdate(float deltaTime)
         {
-            if (movementPath is not { Length: > 0 })
+            if (_movementPath is not { Length: > 0 })
             {
                 OnComplete();
                 return;
             }
 
-            var targetPosition = movementPath[curPathIndex];
+            var targetPosition = _movementPath[_curPathIndex];
 
             var moveDirection = (targetPosition - cachedTransform.position).normalized;
 
@@ -70,13 +72,13 @@ namespace UnitSystem.States
             }
             else
             {
-                if (++curPathIndex >= movementPath.Length)
+                if (++_curPathIndex >= _movementPath.Length)
                     OnComplete();
             }
         }
 
         public IEnumerable<Vector2Int> GetActionArea() =>
-            movementArea ??= FindMovementArea();
+            _movementArea ??= FindMovementArea();
 
         public bool SelectValidCoordinates(Vector2Int coordinates)
         {
@@ -90,19 +92,24 @@ namespace UnitSystem.States
         private Vector2Int[] FindMovementArea()
         {
             var gridBody = UnitReference.GridBody;
-            var start = gridBody.GridCoordinates - Vector2Int.one * movementRange;
-            var end = gridBody.GridCoordinates + Vector2Int.one * movementRange;
-
-            return levelMap.From(start).To(end).Where(cell =>
+            var from = gridBody.GridCoordinates - Vector2Int.one * movementRange;
+            var to = gridBody.GridCoordinates + Vector2Int.one * movementRange;
+            var walkArea = new List<Vector2Int>();
+            
+            levelMap.ForEach(from, to, (x, y, cell) =>
             {
                 if (cell.GridCoordinates == gridBody.GridCoordinates ||
-                    cell.HasAnyGridBody()) return false;
+                    cell.HasAnyGridBody()) return;
 
                 var result = pathfinder.FindPath(gridBody.GridCoordinates, cell.GridCoordinates);
 
-                return result.HasValue &&
-                       result.Value.pathLength <= movementRange * pathfinder.StraightMoveCost;
-            }).Select(cell => cell.GridCoordinates).ToArray();
+                if(!result.HasValue || 
+                   result.Value.pathLength > movementRange * pathfinder.StraightMoveCost) return;
+                
+                walkArea.Add(cell.GridCoordinates);
+            });
+
+            return walkArea.ToArray();
         }
     }
 }

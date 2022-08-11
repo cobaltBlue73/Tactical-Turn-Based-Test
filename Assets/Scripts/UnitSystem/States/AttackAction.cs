@@ -15,12 +15,12 @@ namespace UnitSystem.States
 
         public int AttackRange => attackRange;
 
-        private IDamageable target;
+        private IDamageable _target;
 
-        private Vector2Int[] attackArea;
+        private Vector2Int[] _attackArea;
 
         public override bool CanExecute =>
-            base.CanExecute && target != null;
+            base.CanExecute && _target != null;
 
         private void Reset()
         {
@@ -31,13 +31,13 @@ namespace UnitSystem.States
         public override void OnEnter()
         {
             base.OnEnter();
-            target?.Damage(attackDamage);
+            _target?.Damage(attackDamage);
             OnComplete();
         }
 
         public override void OnExit()
         {
-            attackArea = null;
+            _attackArea = null;
         }
 
         public override void OnUpdate(float deltaTime)
@@ -45,32 +45,30 @@ namespace UnitSystem.States
         }
 
         public IEnumerable<Vector2Int> GetActionArea() =>
-            attackArea ??= FindAttackArea();
+            _attackArea ??= FindAttackArea();
 
         public bool SelectValidCoordinates(Vector2Int coordinates)
         {
-            if (!GetActionArea().Contains(coordinates)) return false;
-
-            return levelMap.TryGetGridBodyAtGridCoordinates(coordinates, out var body) &&
-                   body.TryGetComponent(out target);
+            if (!GetActionArea().Contains(coordinates) && 
+                !levelMap.AnyGridBodyAtGridCoordinates(coordinates)) return false;
+            
+            return levelMap.GetGridBodyAt(coordinates).TryGetComponent(out _target);
         }
 
         private Vector2Int[] FindAttackArea()
         {
-            var start = gridBody.GridCoordinates - Vector2Int.one * attackRange;
-            var end = gridBody.GridCoordinates + Vector2Int.one * attackRange;
+            var from = gridBody.GridCoordinates - Vector2Int.one * attackRange;
+            var to = gridBody.GridCoordinates + Vector2Int.one * attackRange;
+            var attackArea = new List<Vector2Int>();
 
-            return levelMap.From(start).To(end).Where(cell =>
+            levelMap.ForEach(from, to, (x, y, cell) =>
             {
-                if (cell.GridCoordinates == gridBody.GridCoordinates ||
-                    !cell.TryGetGridBody(out var body)) return false;
+                if (cell.GridCoordinates == gridBody.GridCoordinates) return;
 
-                var unit = body.GetComponent<Unit>();
+                attackArea.Add(cell.GridCoordinates);
+            });
 
-                return unit &&
-                       unit.GetAttribute<FactionAttribute>().Value !=
-                       UnitReference.GetAttribute<FactionAttribute>().Value;
-            }).Select(cell => cell.GridCoordinates).ToArray();
+            return attackArea.ToArray();
         }
     }
 }

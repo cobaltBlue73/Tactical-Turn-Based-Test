@@ -4,6 +4,6 @@ namespace GridSystem
 {
     public interface IWorldToGridCoordinatesConverter
     {
-        Vector2Int GetGridCoordinates(Vector3 worldPosition);
+        Vector2Int? GetGridCoordinates(Vector3 worldPosition);
     }
 }

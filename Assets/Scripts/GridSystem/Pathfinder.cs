@@ -21,7 +21,7 @@ namespace GridSystem
 
         #region Variable
 
-        private Grid<PathNode> pathNodeGrid;
+        private Grid<PathNode> _pathNodeGrid;
 
         public int StraightMoveCost => straightMoveCost;
 
@@ -42,8 +42,9 @@ namespace GridSystem
 
         public void Initialize()
         {
-            pathNodeGrid = new Grid<PathNode>(levelMap.GridWidth, levelMap.GridLength,
-                (grid, coordinates) => new PathNode(coordinates));
+            _pathNodeGrid = new Grid<PathNode>(levelMap.GridWidth, levelMap.GridLength,
+                (coordinates) => 
+                    new PathNode(coordinates, levelMap.GetGridCell(coordinates)));
         }
 
         public PathResult? FindPath(Vector2Int startCoordinates, Vector2Int endCoordinates)
@@ -51,11 +52,11 @@ namespace GridSystem
             var openList = new List<PathNode>();
             var closedSet = new HashSet<PathNode>();
 
-            foreach (var pathNode in pathNodeGrid)
+            foreach (var pathNode in _pathNodeGrid)
                 pathNode.Initialize();
 
-            pathNodeGrid.TryGetGridElement(startCoordinates, out var startNode);
-            pathNodeGrid.TryGetGridElement(endCoordinates, out var endNode);
+            var startNode = _pathNodeGrid.GetGridElement(startCoordinates);
+            var endNode = _pathNodeGrid.GetGridElement(endCoordinates);
 
             startNode.GCost = 0;
             startNode.HCost = CalculateDistance(startCoordinates, endCoordinates);
@@ -75,15 +76,15 @@ namespace GridSystem
 
                 openList.Remove(lowestFCostNode);
                 closedSet.Add(lowestFCostNode);
-
-                foreach (var neighbourNode in GetNeighbourNodes(lowestFCostNode))
+                
+                ForEachNeighbourNode(lowestFCostNode, (x, y, neighbourNode) =>
                 {
-                    if (closedSet.Contains(neighbourNode)) continue;
+                    if (closedSet.Contains(neighbourNode)) return;
 
                     var gCost = lowestFCostNode.GCost +
                                 CalculateDistance(lowestFCostNode.GridCoordinates, neighbourNode.GridCoordinates);
 
-                    if (gCost >= neighbourNode.GCost) continue;
+                    if (gCost >= neighbourNode.GCost) return;
 
                     neighbourNode.PreviousNodeOnPath = lowestFCostNode;
                     neighbourNode.GCost = gCost;
@@ -91,7 +92,7 @@ namespace GridSystem
 
                     if (!openList.Contains(neighbourNode))
                         openList.Add(neighbourNode);
-                }
+                });
             }
 
             return null;
@@ -125,17 +126,17 @@ namespace GridSystem
             ;
         }
 
-        private IEnumerable<PathNode> GetNeighbourNodes(PathNode currentNode)
+        private void ForEachNeighbourNode(PathNode currentNode, Action<int, int, PathNode> onNode)
         {
             var from = currentNode.GridCoordinates + Vector2Int.left + Vector2Int.down;
             from.x = Mathf.Max(from.x, 0);
             from.y = Mathf.Max(from.y, 0);
 
             var to = currentNode.GridCoordinates + Vector2Int.right + Vector2Int.up;
-            to.x = Mathf.Min(to.x, pathNodeGrid.Width - 1);
-            to.y = Mathf.Min(to.y, pathNodeGrid.Length - 1);
+            to.x = Mathf.Min(to.x, _pathNodeGrid.Width - 1);
+            to.y = Mathf.Min(to.y, _pathNodeGrid.Length - 1);
 
-            return pathNodeGrid.From(from).To(to);
+            _pathNodeGrid.ForEach(from, to, onNode);
         }
 
         #endregion
